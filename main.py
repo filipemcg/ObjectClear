@@ -50,12 +50,12 @@ def object_clear(image: Image.Image, mask: Image.Image, file_name: str, content_
 
         output = io.BytesIO()
         fused_img_pil.save(output, format="PNG")
-        s3_client.upload_object(f"{phone}/{file_name}_mask.png", output.getvalue())
+        s3_client.upload_object(f"{phone}/{file_name}_watermark_removed.png", output.getvalue())
 
         cmdb.create_s3_content({
             "content_id": content_id,
-            "step": "MASK",
-            "s3_uri": f"s3://minas-workspace-prod/{phone}/{file_name}_mask.png",
+            "step": "WATERMARK_REMOVED",
+            "s3_uri": f"s3://minas-workspace-prod/{phone}/{file_name}_watermark_removed.png",
             "s3_url": "",
         })
     except Exception as e:
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--mask_path', type=str, default='./inputs/masks', help='Input mask image or folder. Default: inputs/masks')
     parser.add_argument('-o', '--output_path', type=str, default=None, help='Output folder. Default: results/<input_name>')
     parser.add_argument('--cache_dir', type=str, default=None, help="Path to cache directory")
-    parser.add_argument('--use_fp16', action='store_true', help='Use float16 for inference')
+    parser.add_argument('--use_fp16', default=True, action='store_true', help='Use float16 for inference')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for torch.Generator. Default: 42')
     parser.add_argument('--steps', type=int, default=20, help='Number of diffusion inference steps. Default: 20')
     parser.add_argument('--guidance_scale', type=float, default=2.5, help='CFG guidance scale. Default: 2.5')
