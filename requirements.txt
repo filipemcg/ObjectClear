@@ -7,3 +7,7 @@ pillow
 transformers
 scipy
 diffusers
+requests
+boto3
+pillow
+cloudscraper
