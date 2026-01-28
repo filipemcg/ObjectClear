@@ -108,7 +108,6 @@ def process_image(task_definition: JobEnvelope):
             "s3_url": "",
         })
     except Exception as e:
-        log.error(f"Failed to process image {content['url']}")
         log.exception(e)
 
 def main():
