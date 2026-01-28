@@ -128,7 +128,8 @@ def main():
                     process_image(task_definition)
                     dynamo.put_item(hash="OBJECT_CLEAR", range=task_definition.request_id, meta={'status': 'COMPLETED'})
             except Exception as e:
-                log.info(f"Worker exception while processing message: {repr(e)}")
+                log.info(f"Worker exception while processing message")
+                log.exception(e)
                 continue
 
             message.delete()
