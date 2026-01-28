@@ -62,7 +62,7 @@ def process_image(task_definition: JobEnvelope):
             url = os.getenv("MINAS_CMDB_URL")
             assert url is not None, "MINAS_CMDB_URL environment variable not set"
             cmdb = CMDB(url)
-        if task_definition.payload.meta.project_id == "ROSA":
+        elif task_definition.payload.meta.project_id == "ROSA":
             s3_client = S3("rosa-workspace-prod")
             url = os.getenv("ROSA_CMDB_URL")
             assert url is not None, "ROSA_CMDB_URL environment variable not set"
