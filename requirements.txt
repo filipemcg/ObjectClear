@@ -11,3 +11,4 @@ requests
 boto3
 pillow
 cloudscraper
+pydantic
