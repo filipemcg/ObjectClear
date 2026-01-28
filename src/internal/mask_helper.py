@@ -1,3 +1,4 @@
+import os
 from PIL import Image
 import io
 from services.boto import S3 as ServiceS3
@@ -16,7 +17,7 @@ class Mask(ABC):
 
     def __init__(self, s3_record, phone) -> None:
         self.s3_workspace = ServiceS3("minas-workspace-prod")
-        self.cmdb_client = CMDB()
+        self.cmdb_client = CMDB(os.getenv("MINAS_CMDB_URL"))
 
         self.original_path = s3_record["s3_uri"].replace("s3://minas-workspace-prod/", "")
         self.__s3_record = s3_record
