@@ -21,7 +21,7 @@ from utils.schemas import JobEnvelope
 import json
 
 
-def object_clear(image: Image.Image, mask: Image.Image, file_name: str, content_id: str, phone: str) -> io.BytesIO:
+def object_clear(image: Image.Image, mask: Image.Image) -> io.BytesIO:
     image = image.convert("RGB")
     mask = mask.convert("L")
     image_or = image.copy()
@@ -98,7 +98,7 @@ def process_image(task_definition: JobEnvelope):
         original_image = mask.original_image
         masked_image = mask.mask
 
-        result = object_clear(original_image, masked_image, file_name, content['id'], phone)
+        result = object_clear(original_image, masked_image)
         s3_client.upload_object(f"{phone}/{file_name}_watermark_removed.png", result.getvalue())
 
         cmdb.create_s3_content({
@@ -108,7 +108,8 @@ def process_image(task_definition: JobEnvelope):
             "s3_url": "",
         })
     except Exception as e:
-        log.error(f"Failed to process image {content['url']}: {str(e)}")
+        log.error(f"Failed to process image {content['url']}")
+        log.exception(e)
 
 def main():
     sqs = boto3.resource("sqs", region_name="eu-west-1")
