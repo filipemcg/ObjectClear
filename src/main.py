@@ -2,6 +2,9 @@
 # import glob
 import argparse
 import io
+import os
+
+import boto3
 import torch
 from objectclear.pipelines import ObjectClearPipeline
 from objectclear.utils import resize_by_short_side
@@ -9,14 +12,14 @@ from PIL import Image
 import numpy as np
 from requests import Response
 from services.cmdb import CMDB
-from services.boto import S3
+from services.boto import S3, JobStatusDynamo
 from services.logger import log
 from internal.image_helper import ImageHelper
 from internal.mask_helper import MaskFactory
 from utils import Utils
+from utils.schemas import JobEnvelope
+import json
 
-cmdb = CMDB()
-s3_client = S3("minas-workspace-prod")
 
 def object_clear(image: Image.Image, mask: Image.Image, file_name: str, content_id: str, phone: str) -> io.BytesIO:
     image = image.convert("RGB")
@@ -52,8 +55,23 @@ def object_clear(image: Image.Image, mask: Image.Image, file_name: str, content_
 
     return output
 
-def process_image(content):
+def process_image(task_definition: JobEnvelope):
     try:
+        if task_definition.payload.meta.project_id == "MINAS":
+            s3_client = S3("minas-workspace-prod")
+            url = os.getenv("MINAS_CMDB_URL")
+            assert url is not None, "MINAS_CMDB_URL environment variable not set"
+            cmdb = CMDB(url)
+        if task_definition.payload.meta.project_id == "ROSA":
+            s3_client = S3("rosa-workspace-prod")
+            url = os.getenv("ROSA_CMDB_URL")
+            assert url is not None, "ROSA_CMDB_URL environment variable not set"
+            cmdb = CMDB(url)
+        else:
+            raise ValueError(f"Unknown project_id: {task_definition.payload.meta.project_id}")
+
+        content = cmdb.get_content_by_id(task_definition.payload.meta.content_id).json()
+
         phone: str = content['profile']['contact']['phone'].replace("+", "")
         domain: str = content['profile']['site']['domain'].split(".")[0]
         identifier: str = Utils.generate_identifier()
@@ -93,34 +111,26 @@ def process_image(content):
         log.error(f"Failed to process image {content['url']}: {str(e)}")
 
 def main():
-    contact_list = []
-    page_num = 1
+    sqs = boto3.resource("sqs", region_name="eu-west-1")
+    dynamo = JobStatusDynamo()
+    queue = sqs.get_queue_by_name(QueueName="vc-job-queue")
+
     while True:
-        contact_response: Response = cmdb.get_contact_list(page_num=page_num, page_size=50)
-        contact_response.raise_for_status()
-
-        content_list = contact_response.json()
-        if len(content_list) == 0:
-            break
-
-        contact_list.extend(content_list)
-        page_num += 1
-
-    for contact in contact_list:
-        log.info(f"ID: {contact['id']}, Phone: {contact['phone']}")
-        content_response: Response = cmdb.get_content_by_phone(contact['phone'])
-        content_response.raise_for_status()
-
-        content_list = content_response.json()
-        for content in content_list:
-            log.info(f"Download and save image: {content['url']}")
-
-            if content['type'] == "IMAGE":
-                process_image(content)
-
-            else:
-                log.error(f"Unknown content type: {content['type']}")
+        messages = queue.receive_messages(MaxNumberOfMessages=10, WaitTimeSeconds=20)
+        for message in messages:
+            try:
+                data = json.loads(message.body)
+                task_definition = JobEnvelope.model_validate(data)
+                log.info(f"Worker processing message: {task_definition}")
+                if task_definition.payload.job == 'OBJECT_REMOVAL':
+                    dynamo.put_item(hash="OBJECT_CLEAR", range=task_definition.request_id, meta={'status': 'PENDING'})
+                    process_image(task_definition)
+                    dynamo.put_item(hash="OBJECT_CLEAR", range=task_definition.request_id, meta={'status': 'COMPLETED'})
+            except Exception as e:
+                log.info(f"Worker exception while processing message: {repr(e)}")
                 continue
+
+            message.delete()
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

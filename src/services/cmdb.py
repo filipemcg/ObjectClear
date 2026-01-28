@@ -7,8 +7,8 @@ from requests import Response
 import os
 
 class CMDB:
-    def __init__(self) -> None:
-        self.url = os.getenv("CMDB_URL")
+    def __init__(self, url: str) -> None:
+        self.url = url
         self.headers = {
         'Content-Type': 'application/json'
         }
@@ -146,6 +146,11 @@ class CMDB:
     def create_profile_info(self, profile_info: dict) -> Response:
         url = f"{self.url}/api/profile-info"
         response = requests.post(url, headers=self.headers, data=json.dumps(profile_info))
+        return response
+
+    def get_content_by_id(self, id: str):
+        url = f"{self.url}/api/content/{id}"
+        response = requests.get(url, headers=self.headers)
         return response
 
     def get_content_by_phone(self, phone: str):
