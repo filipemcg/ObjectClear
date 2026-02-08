@@ -5,6 +5,7 @@ from services.boto import S3 as ServiceS3
 from services.logger import log
 from services.cmdb import CMDB
 from abc import ABC, abstractmethod
+from schemas.sqs import ObjectRemovalData
 
 
 class Mask(ABC):
@@ -15,31 +16,19 @@ class Mask(ABC):
     def apply_mask(self):
         raise NotImplementedError("Subclasses should implement this method")
 
-    def __init__(self, s3_record, phone) -> None:
+    def __init__(self, data: ObjectRemovalData, original_image_uri: str) -> None:
         self.s3_workspace = ServiceS3("minas-workspace-prod")
-        self.cmdb_client = CMDB(os.getenv("MINAS_CMDB_URL"))
 
-        self.original_path = s3_record["s3_uri"].replace("s3://minas-workspace-prod/", "")
-        self.__s3_record = s3_record
-        self.phone = phone
+        self.original_path = original_image_uri.replace("s3://minas-workspace-prod/", "")
+        self.__s3_record = data
+        self.phone = data.phone
 
         self.__open_original_image()
 
     def store_mask(self):
-        file_name = self.__s3_record["s3_uri"].split("/")[-1].split(".")[0]  # type: ignore
-        print(self.__s3_record)
+        file_name = self.original_path.split("/")[-1].split(".")[0]  # type: ignore
         phone = self.phone.replace("+", "")  # type: ignore
         self.s3_workspace.upload_object(f"{phone}/{file_name}_mask.png", self.buff_mask)
-
-        try:
-            self.cmdb_client.create_s3_content({
-                "content_id": self.__s3_record["content_id"],
-                "step": "MASK",
-                "s3_uri": f"s3://minas-workspace-prod/{phone}/{file_name}_mask.png",
-                "s3_url": "",
-            })
-        except Exception as e:
-            log.error(f"Failed to create S3 record for mask: {e}")
 
     def store_opacity(self):
         if not self.buff_original or not self.buff_mask:
@@ -59,20 +48,11 @@ class Mask(ABC):
         output = io.BytesIO()
         res_image.save(output, format="PNG")
 
-        file_name = self.__s3_record["s3_uri"].split("/")[-1].split(".")[0]  # type: ignore
+        file_name = self.original_path.split("/")[-1].split(".")[0]  # type: ignore
         phone = self.phone.replace("+", "")  # type: ignore
         self.s3_workspace.upload_object(
             f"{phone}/{file_name}_opacity.png", output.getvalue()
         )
-        try:
-            self.cmdb_client.create_s3_content({
-                "content_id": self.__s3_record["content_id"],
-                "step": "OPACITY",
-                "s3_uri": f"s3://minas-workspace-prod/{phone}/{file_name}_opacity.png",
-                "s3_url": "",
-            })
-        except Exception as e:
-            log.error(f"Failed to create S3 record for opacity: {e}")
 
     def __open_original_image(self):
         # TODO: should I resize here?
@@ -86,8 +66,8 @@ class Mask(ABC):
 
 
 class PrivateMask(Mask):
-    def __init__(self, s3_record, phone) -> None:
-        super().__init__(s3_record, phone)
+    def __init__(self, data: ObjectRemovalData, original_image_uri: str) -> None:
+        super().__init__(data, original_image_uri)
         self.__init_orientation()
 
     def __init_orientation(self):
@@ -139,9 +119,9 @@ class PrivateMask(Mask):
 # Factory Class for Mask
 class MaskFactory:
     @staticmethod
-    def create_mask(domain, s3_record, phone) -> Mask:
+    def create_mask(domain, data: ObjectRemovalData, original_image_uri: str) -> Mask:
         if domain and "private" in domain:
             log.info("Minas detected")
-            return PrivateMask(s3_record, phone)
+            return PrivateMask(data, original_image_uri)
         else:
             raise Exception("Domain not supported")

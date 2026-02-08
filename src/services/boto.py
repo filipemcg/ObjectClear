@@ -1,6 +1,8 @@
 import boto3
 from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 
+from schemas.dynamo import JobStatus
+
 def encode_dict_to_dynamodb_map(data: dict):
     serializer = TypeSerializer()
     return {k: serializer.serialize(v) for k, v in data.items()}
@@ -17,17 +19,15 @@ class JobStatusDynamo:
         self.table = "vc-job-status"
         self.region = "eu-west-1"
 
-    def put_item(self, hash: str, range: str, meta: dict):
-        meta = encode_dict_to_dynamodb_map(meta)
+    def put_item(self, item: JobStatus):
         self.client.put_item(
             TableName=self.table,
             Item={
-                "hash": {"S": hash},
-                "range": {"S": range},
-                "meta": {"M": meta},
+                "hash": {"S": item.hash},
+                "range": {"S": item.range},
+                "meta": {"M": encode_dict_to_dynamodb_map(item.meta.model_dump())},
             },
         )
-
 
 class S3:
     def __init__(self, bucket: str) -> None:
@@ -47,3 +47,13 @@ class S3:
 
     def delete_object(self, path):
         self.__s3.delete_object(Bucket=self.__bucket, Key=path)
+
+class SSM:
+    def __init__(self) -> None:
+        # parameters are in eu-central-1 region
+        self.client = boto3.client("ssm")
+
+    def get_parameter(self, parameter_name: str):
+        response: dict = self.client.get_parameter(Name=parameter_name, WithDecryption=True)
+        parameter: dict = response["Parameter"]
+        return parameter["Value"]

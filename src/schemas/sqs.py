@@ -4,6 +4,9 @@ from typing import Union, Literal, Any
 class ObjectRemovalData(BaseModel):
     project_id: Literal['MINAS', 'ROSA']
     content_id: int
+    phone: str
+    domain: str
+    url: str
 
 class PostJobRequest(BaseModel):
     job: Literal['OBJECT_REMOVAL']
