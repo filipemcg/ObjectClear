@@ -1,26 +1,21 @@
-from pydantic import BaseModel, model_validator
-from typing import Union, Literal, Any
+from pydantic import BaseModel, Field
+from typing import Annotated, Union, Literal
 
-class ObjectRemovalData(BaseModel):
+
+class ObjectRemovalDataV1(BaseModel):
+    version: Literal['v1']
     project_id: Literal['MINAS', 'ROSA']
     content_id: int
     phone: str
     domain: str
     url: str
 
-class PostJobRequest(BaseModel):
-    job: Literal['OBJECT_REMOVAL']
-    meta: Union[ObjectRemovalData]
 
-    @model_validator(mode='before')
-    def dispatch_before(values: dict[str, Any]) -> dict[str, Any]:
-        job = values.get('job')
-        meta = values.get('meta')
-        if isinstance(meta, dict):
-            if job == 'OBJECT_REMOVAL':
-                values['meta'] = ObjectRemovalData.model_validate(meta)
-        return values
+class ObjectRemovalRequest(BaseModel):
+    job: Literal['OBJECT_REMOVAL']
+    meta: Annotated[Union[ObjectRemovalDataV1], Field(discriminator='version')]
+
 
 class JobEnvelope(BaseModel):
     request_id: str
-    payload: Union[PostJobRequest]
+    payload: Annotated[Union[ObjectRemovalRequest], Field(discriminator='job')]

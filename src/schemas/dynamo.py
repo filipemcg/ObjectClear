@@ -1,14 +1,14 @@
-from pydantic import BaseModel
-from typing import Literal, Union
+from pydantic import BaseModel, Field
+from typing import Annotated, Literal, Union
 
 class MetaDataV1(BaseModel):
     version: Literal["v1"] = "v1"
-    original_uri: str | None
-    removed_uri: str | None
+    original_uri: str | None = None
+    removed_uri: str | None = None
 
 class MetaStatus(BaseModel):
     status: Literal["QUEUED", "PENDING", "COMPLETED", "FAILED"]
-    data: Union[MetaDataV1] | None = None
+    data: Annotated[Union[MetaDataV1], Field(discriminator='version')] = None
 
 class JobStatus(BaseModel):
     hash: Literal["OBJECT_CLEAR"]

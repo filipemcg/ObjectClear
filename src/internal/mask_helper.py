@@ -5,7 +5,7 @@ from services.boto import S3 as ServiceS3
 from services.logger import log
 from services.cmdb import CMDB
 from abc import ABC, abstractmethod
-from schemas.sqs import ObjectRemovalData
+from schemas.sqs import ObjectRemovalRequest
 
 
 class Mask(ABC):
@@ -16,12 +16,12 @@ class Mask(ABC):
     def apply_mask(self):
         raise NotImplementedError("Subclasses should implement this method")
 
-    def __init__(self, data: ObjectRemovalData, original_image_uri: str) -> None:
+    def __init__(self, data: ObjectRemovalRequest, original_image_uri: str) -> None:
         self.s3_workspace = ServiceS3("minas-workspace-prod")
 
         self.original_path = original_image_uri.replace("s3://minas-workspace-prod/", "")
-        self.__s3_record = data
-        self.phone = data.phone
+        self.__s3_record = None
+        self.phone = data.meta.phone
 
         self.__open_original_image()
 
@@ -66,7 +66,7 @@ class Mask(ABC):
 
 
 class PrivateMask(Mask):
-    def __init__(self, data: ObjectRemovalData, original_image_uri: str) -> None:
+    def __init__(self, data: ObjectRemovalRequest, original_image_uri: str) -> None:
         super().__init__(data, original_image_uri)
         self.__init_orientation()
 
@@ -119,7 +119,7 @@ class PrivateMask(Mask):
 # Factory Class for Mask
 class MaskFactory:
     @staticmethod
-    def create_mask(domain, data: ObjectRemovalData, original_image_uri: str) -> Mask:
+    def create_mask(domain, data: ObjectRemovalRequest, original_image_uri: str) -> Mask:
         if domain and "private" in domain:
             log.info("Minas detected")
             return PrivateMask(data, original_image_uri)

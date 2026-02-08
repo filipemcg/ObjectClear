@@ -1,14 +1,14 @@
-# import os
-# import glob
+import os
+import glob
 import argparse
 import io
 import os
 
 import boto3
-# import torch
-# from objectclear.pipelines import ObjectClearPipeline
-# from objectclear.utils import resize_by_short_side
-# import numpy as np
+import torch
+from objectclear.pipelines import ObjectClearPipeline
+from objectclear.utils import resize_by_short_side
+import numpy as np
 from PIL import Image
 from requests import Response
 from schemas.dynamo import JobStatus, MetaDataV1, MetaStatus
@@ -22,39 +22,39 @@ from schemas.sqs import JobEnvelope
 import json
 
 
-# def object_clear(image: Image.Image, mask: Image.Image) -> io.BytesIO:
-#     image = image.convert("RGB")
-#     mask = mask.convert("L")
-#     image_or = image.copy()
-# 
-#     # Our model was trained on 512×512 resolution.
-#     # Resizing the input so that the **shorter side is 512** helps achieve the best performance.
-#     image = resize_by_short_side(image, 512, resample=Image.BICUBIC)
-#     mask = resize_by_short_side(mask, 512, resample=Image.NEAREST)
-#     
-#     w, h = image.size
-# 
-#     result = pipe(
-#         prompt="remove the instance of object",
-#         image=image,
-#         mask_image=mask,
-#         generator=generator,
-#         num_inference_steps=args.steps,
-#         guidance_scale=args.guidance_scale,
-#         height=h,
-#         width=w,
-#         return_attn_map=False,
-#     )
-# 
-#     fused_img_pil = result.images[0]
-# 
-#     # save results
-#     fused_img_pil = fused_img_pil.resize(image_or.size)
-# 
-#     output = io.BytesIO()
-#     fused_img_pil.save(output, format="PNG")
-# 
-#     return output
+def object_clear(image: Image.Image, mask: Image.Image) -> io.BytesIO:
+    image = image.convert("RGB")
+    mask = mask.convert("L")
+    image_or = image.copy()
+
+    # Our model was trained on 512×512 resolution.
+    # Resizing the input so that the **shorter side is 512** helps achieve the best performance.
+    image = resize_by_short_side(image, 512, resample=Image.BICUBIC)
+    mask = resize_by_short_side(mask, 512, resample=Image.NEAREST)
+    
+    w, h = image.size
+
+    result = pipe(
+        prompt="remove the instance of object",
+        image=image,
+        mask_image=mask,
+        generator=generator,
+        num_inference_steps=args.steps,
+        guidance_scale=args.guidance_scale,
+        height=h,
+        width=w,
+        return_attn_map=False,
+    )
+
+    fused_img_pil = result.images[0]
+
+    # save results
+    fused_img_pil = fused_img_pil.resize(image_or.size)
+
+    output = io.BytesIO()
+    fused_img_pil.save(output, format="PNG")
+
+    return output
 
 def process_image(task_definition: JobEnvelope) -> JobStatus:
     try:
@@ -78,11 +78,11 @@ def process_image(task_definition: JobEnvelope) -> JobStatus:
         original_image_uri = f"s3://minas-workspace-prod/{dest_path}"
 
         # APPLY MASK
-        mask = MaskFactory.create_mask(domain, original_image_uri, phone)
+        mask = MaskFactory.create_mask(domain, task_definition.payload, original_image_uri)
         mask.apply_mask()
 
-        # result = object_clear(original_image, masked_image)
-        # s3_client.upload_object(f"{phone}/{file_name}_watermark_removed.png", result.getvalue())
+        result = object_clear(image_helper.image, mask.mask)
+        s3_client.upload_object(f"{phone}/{file_name}_watermark_removed.png", result.getvalue())
         watermark_removed_uri = f"s3://minas-workspace-prod/{phone}/{file_name}_watermark_removed.png"
 
         dynamo_item = JobStatus(
@@ -146,18 +146,18 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # torch_dtype = torch.float16 if args.use_fp16 else torch.float32
-    # variant = "fp16" if args.use_fp16 else None
-    # generator = torch.Generator(device=device).manual_seed(args.seed)
-    # use_agf = not args.no_agf
-    # pipe = ObjectClearPipeline.from_pretrained_with_custom_modules(
-    #     "jixin0101/ObjectClear",
-    #     torch_dtype=torch_dtype,
-    #     apply_attention_guided_fusion=use_agf,
-    #     cache_dir=args.cache_dir,
-    #     variant=variant,
-    # )
-    # pipe.to(device)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    torch_dtype = torch.float16 if args.use_fp16 else torch.float32
+    variant = "fp16" if args.use_fp16 else None
+    generator = torch.Generator(device=device).manual_seed(args.seed)
+    use_agf = not args.no_agf
+    pipe = ObjectClearPipeline.from_pretrained_with_custom_modules(
+        "jixin0101/ObjectClear",
+        torch_dtype=torch_dtype,
+        apply_attention_guided_fusion=use_agf,
+        cache_dir=args.cache_dir,
+        variant=variant,
+    )
+    pipe.to(device)
 
     main()
